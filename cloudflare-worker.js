@@ -295,25 +295,29 @@ function isStaticFile(pathname) {
 function isValidPrerenderHtml(html, pathname) {
   if (typeof html !== 'string' || !html.trim()) return false;
 
-  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim();
-  const canonical = html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]
-    || html.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["'][^>]*>/i)?.[1];
-  const heading = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim();
+  const title = html.match(/<title[^>]*>(.*?)<\\/title>/i)?.[1]?.trim();
+  const canonical = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]
+    || html.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["'][^>]*>/i)?.[1];
+  const heading = html.match(/<h1[^>]*>(.*?)<\\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim();
 
   if (!title || !canonical || !heading) return false;
 
   let canonicalPath;
   try {
-    canonicalPath = new URL(canonical).pathname.replace(/\/$/, '') || '/';
+    canonicalPath = new URL(canonical).pathname;
   } catch {
     return false;
   }
 
-  const requestedPath = pathname.replace(/\/$/, '') || '/';
-  if (canonicalPath !== requestedPath) return false;
+  const requestedPath = pathname || '/';
+  const normalizePath = (path) => path.length > 1 && path.endsWith('/')
+    ? path.slice(0, -1)
+    : path;
+
+  if (normalizePath(canonicalPath) !== normalizePath(requestedPath)) return false;
 
   // This title is the renderer's fallback for paths missing from its map.
-  if (requestedPath !== '/' && /^ToolsML\s*-\s*Best AI Tools\b/i.test(title)) {
+  if (requestedPath !== '/' && title.toLowerCase().startsWith('toolsml - best ai tools')) {
     return false;
   }
 
