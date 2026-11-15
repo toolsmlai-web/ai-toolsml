@@ -295,10 +295,10 @@ function isStaticFile(pathname) {
 function isValidPrerenderHtml(html, pathname) {
   if (typeof html !== 'string' || !html.trim()) return false;
 
-  const title = html.match(/<title[^>]*>(.*?)<\\/title>/i)?.[1]?.trim();
+  const title = html.match(/<title[^>]*>(.*?)<\/title>/i)?.[1]?.trim();
   const canonical = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]
     || html.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["'][^>]*>/i)?.[1];
-  const heading = html.match(/<h1[^>]*>(.*?)<\\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim();
+  const heading = html.match(/<h1[^>]*>(.*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim();
 
   if (!title || !canonical || !heading) return false;
 
@@ -442,7 +442,6 @@ export default {
       } catch (error) {
         console.error(`[Prerender Error] ${error.message}`);
         return prerenderUnavailable();
-      }
       }
     }
     
