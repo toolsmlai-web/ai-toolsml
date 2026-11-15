@@ -288,6 +288,50 @@ function isStaticFile(pathname) {
 }
 
 /**
+ * Validate that prerendered HTML belongs to the requested URL.
+ * The current Supabase renderer can return generic homepage content for
+ * paths it does not recognize. Never serve that content as a tool page.
+ */
+function isValidPrerenderHtml(html, pathname) {
+  if (typeof html !== 'string' || !html.trim()) return false;
+
+  const title = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]?.trim();
+  const canonical = html.match(/<link\\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]
+    || html.match(/<link\\b[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["'][^>]*>/i)?.[1];
+  const heading = html.match(/<h1[^>]*>([\\s\\S]*?)<\\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim();
+
+  if (!title || !canonical || !heading) return false;
+
+  let canonicalPath;
+  try {
+    canonicalPath = new URL(canonical).pathname.replace(/\\/$/, '') || '/';
+  } catch {
+    return false;
+  }
+
+  const requestedPath = pathname.replace(/\\/$/, '') || '/';
+  if (canonicalPath !== requestedPath) return false;
+
+  // This title is the renderer's fallback for paths missing from its map.
+  if (requestedPath !== '/' && /^ToolsML\\s*-\\s*Best AI Tools\\b/i.test(title)) {
+    return false;
+  }
+
+  return true;
+}
+
+function prerenderUnavailable() {
+  return new Response('Page prerendering is temporarily unavailable.', {
+    status: 503,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Retry-After': '60',
+    },
+  });
+}
+
+/**
  * Get client IP from request
  */
 function getClientIP(request) {
@@ -364,25 +408,37 @@ export default {
         
         if (prerenderResponse.ok) {
           const html = await prerenderResponse.text();
-          
+
+          if (!isValidPrerenderHtml(html, url.pathname)) {
+            console.error(`[Prerender Invalid] Refusing generic or mismatched HTML for ${url.pathname}`);
+            return prerenderUnavailable();
+          }
+
           return new Response(html, {
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
-              'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+              'Cache-Control': 'public, max-age=3600, s-maxage=3600',
               'X-Prerendered': 'true',
               'X-Prerender-Bot': userAgent.substring(0, 100),
               'X-Robots-Tag': 'index, follow',
               'X-RateLimit-Remaining': String(rateLimit.remaining),
             },
           });
-        } else {
-          console.error(`[Prerender Failed] Status: ${prerenderResponse.status}`);
-          // Fall through to origin on prerender failure
         }
+
+        console.error(`[Prerender Failed] Status: ${prerenderResponse.status}`);
+        if (prerenderResponse.status === 404) {
+          return new Response('Not Found', {
+            status: 404,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          });
+        }
+        return prerenderUnavailable();
       } catch (error) {
         console.error(`[Prerender Error] ${error.message}`);
-        // Fall through to origin on error
+        return prerenderUnavailable();
+      }
       }
     }
     
